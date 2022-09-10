@@ -1,8 +1,9 @@
 use std::io::*;
 use std::env::*;
 use ndarray::prelude::*;
+use std::fmt::Write;
 fn main() {
-    let args : Vec<String> = env::args().collect();
+    let args : Vec<String> = std::env::args().collect();
     if args.len() > 1 && args[1] == "competitive" {
         competitive_lotka_volterra();
     }
@@ -99,10 +100,10 @@ fn competitive_lotka_volterra() {
         }
         names
     }; 
-    let (r, k, mut x) = {
+    let (r, k_inv, mut x) = {
         //TODO: Optimize
         let mut r_vec : Vec<f32> = Vec::with_capacity(no_species);
-        let mut k_vec = Vec<f32> : Vec::with_capacity(no_species);
+        let mut k_vec : Vec<f32> = Vec::with_capacity(no_species);
         let mut x_vec : Vec<f32> = Vec::with_capacity(no_species);
         for name in &species_names {
             println!("Enter the reproduction rate for {}", name);
@@ -112,40 +113,41 @@ fn competitive_lotka_volterra() {
             println!("Enter the initial population for {}", &name);
             x_vec.push(get_f32(&mut stdin, &mut line));
         }
-        let r = Array1::from_vec(r_vec);
-        let k = Array1::from_vec(k_vec);
-        let x = Array1::from_vec(x_vec);
-        (r, k, x)
-    }
+        let r = Array1::from(r_vec);
+        let k_inv = Array1::from(k_vec.iter().map(|&z| 1.0/z).collect::<Vec<_>>());
+        let x = Array1::from(x_vec);
+        (r, k_inv, x)
+    };
     let (community_matrix, h, no_iters) = {
         let no_interactions = no_species * no_species;
-        let mut interactions : Vec<f32> = Vec::with_capacity(interactions);
-        println!("Enter the community matrix in row major order")
-        for i in 0..interactions {
+        let mut interactions : Vec<f32> = Vec::with_capacity(no_interactions);
+        println!("Enter the community matrix in row major order");
+        for i in 0..no_interactions {
             interactions.push(get_f32(&mut stdin, &mut line));
         }
         let matrix = Array2::from_shape_vec((no_species, no_species), interactions).unwrap();
         println!("Enter the timestep");
         let h =  get_f32(&mut stdin, &mut line);
         println!("Enter the numner of iterations");
-        let no_iters = get_u32(&mut stdin, &mut line);
-        (matrix, h, iterations);
-    }
-    let mut dataponts : Array2<f32> = Array2::zeros(no_iters + 1, no_species);
+        let no_iters = get_u32(&mut stdin, &mut line) as usize;
+        (matrix, h, no_iters)
+    };
+    let mut datapoints : Array2<f32> = Array::zeros((no_iters + 1, no_species));
     {
-        let current_row = datapoints.slice_mut(s![0, ..]);
-        current_row.assign(x);
+        let mut current_row = datapoints.slice_mut(s![0 as usize, ..]);
+        current_row.assign(&x);
     }
-    let end = no_iters * h;
-    let timevec = Array1::linspace(0.0, end, no_iters + 1);
+    let end = (no_iters as f32) * h;
+    let timevec = Array1::<f32>::linspace(0.0, end, no_iters + 1);
     //TODO: Optimize?
     for i in 0..no_iters {
-        x.assign(datapoints.slice(s![i, ..]));
-        let current_row = datapoints.slice_mut(s![i + 1, ..]);
-        x_new = x + (r * x * (1/k) * community_matrix.dot(x)) * h;
-        current_row.assign(x_new);
+        let row_index = i as usize;
+        x.assign(&datapoints.slice(s![row_index, ..]));
+        let mut current_row = datapoints.slice_mut(s![row_index + 1, ..]);
+        let x_new = &x + &(h * (((&r * &x) * &k_inv) * community_matrix.dot(&x)));
+        current_row.assign(&x_new);
     }
-    write!(&mut line, "time\t{}");
+    write!(&mut line, "time\t");
     write_table_line_species(&mut line, &species_names);
     println!("{}", &line);
     line.clear();
