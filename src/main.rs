@@ -6,8 +6,9 @@ fn main() {
     let args : Vec<String> = std::env::args().collect();
     if args.len() > 1 && args[1] == "competitive" {
         competitive_lotka_volterra();
+    } else {
+        lotka_volterra();
     }
-    lotka_volterra();
 }
 
 fn get_f32(stdin: &mut Stdin, line : &mut String) -> f32 {
@@ -49,13 +50,13 @@ fn lotka_volterra() {
         println!("Enter the starting population of {}", &predator_name);
         let y = get_f32(&mut stdin, &mut line);
         println!("Enter the timestep");
-        let h =  get_f32(&mut stdin, &mut line);
+        let h = get_f32(&mut stdin, &mut line);
         println!("Enter the number of iterations");
-        /*let no_iters : usize = {
+        let no_iters : usize = {
             let dur = get_f32(&mut stdin, &mut line);
-            ((dur / h) as i32).try_into().unwrap()
-        }; */
-        let no_iters = get_u32(&mut stdin, &mut line);
+            (dur / h) as usize
+        }; 
+        //let no_iters = get_u32(&mut stdin, &mut line);
         (array, x, y, h, no_iters)
     }; 
     println!("alpha = {}, beta = {}, gamma = {}, delta =  {}", params[0], params[1], params[2], params[3]);
@@ -64,7 +65,7 @@ fn lotka_volterra() {
     let mut y = y_0;
     let mut timestamp = 0.0;
     datapoints.push((timestamp, x, y));
-    for i in 0..no_iters {
+    for _i in 0..no_iters {
         let x_new = x + h * (x * (params[0] - params[1] * y));
         let y_new = y + h * (y * (params[3] * x - params[2]));
         x = x_new;
@@ -93,9 +94,10 @@ fn competitive_lotka_volterra() {
     let mut line = String::new(); 
     println!("Enter the number of species");
     let no_species = get_u32(&mut stdin, &mut line) as usize;
+    println!("Enter the name of each species");
     let species_names : Vec<String> = {
         let mut names = Vec::with_capacity(no_species);
-        for i in 0..no_species {
+        for _i in 0..no_species {
             names.push(get_string(&mut stdin));
         }
         names
@@ -122,14 +124,18 @@ fn competitive_lotka_volterra() {
         let no_interactions = no_species * no_species;
         let mut interactions : Vec<f32> = Vec::with_capacity(no_interactions);
         println!("Enter the community matrix in row major order");
-        for i in 0..no_interactions {
+        for _i in 0..no_interactions {
             interactions.push(get_f32(&mut stdin, &mut line));
         }
         let matrix = Array2::from_shape_vec((no_species, no_species), interactions).unwrap();
         println!("Enter the timestep");
         let h =  get_f32(&mut stdin, &mut line);
         println!("Enter the numner of iterations");
-        let no_iters = get_u32(&mut stdin, &mut line) as usize;
+        let no_iters : usize = {
+            let dur = get_f32(&mut stdin, &mut line);
+            (dur / h) as usize
+        }; 
+        //let no_iters = get_u32(&mut stdin, &mut line) as usize;
         (matrix, h, no_iters)
     };
     let mut datapoints : Array2<f32> = Array::zeros((no_iters + 1, no_species));
@@ -139,12 +145,14 @@ fn competitive_lotka_volterra() {
     }
     let end = (no_iters as f32) * h;
     let timevec = Array1::<f32>::linspace(0.0, end, no_iters + 1);
+    let ones = Array1::<f32>::ones(no_species);
     //TODO: Optimize?
     for i in 0..no_iters {
         let row_index = i as usize;
         x.assign(&datapoints.slice(s![row_index, ..]));
         let mut current_row = datapoints.slice_mut(s![row_index + 1, ..]);
-        let x_new = &x + &(h * (((&r * &x) * &k_inv) * community_matrix.dot(&x)));
+        //let x_new = &x + &(h * (((&r * &x) * &k_inv) * community_matrix.dot(&x)));
+        let x_new = &x + &(h * (((&r * &x) * (&ones - &(community_matrix.dot(&x) * &k_inv)))));
         current_row.assign(&x_new);
     }
     write!(&mut line, "time\t");
